@@ -99,7 +99,7 @@ class EntityActor extends AbstractBehavior<EntityActor.Command> {
   }
 
   static String entityId(int nodePort, int id) {
-    return String.format("%d-%d", nodePort, id);
+    return String.format("device-%d-%d", nodePort, id);
   }
 
   public interface Command extends CborSerializable {}

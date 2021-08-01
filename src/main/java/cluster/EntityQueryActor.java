@@ -30,24 +30,24 @@ class EntityQueryActor extends AbstractBehavior<EntityActor.Command> {
     clusterSharding = ClusterSharding.get(actorContext.getSystem());
 
     entitiesPerNode = actorContext.getSystem().settings().config().getInt("entity-actor.entities-per-node");
-    final var interval = Duration.parse(actorContext.getSystem().settings().config().getString("entity-actor.query-tick-interval-iso-8601"));
-    timerScheduler.startTimerWithFixedDelay(Tick.ticktock, interval);
+    // final var interval = Duration.parse(actorContext.getSystem().settings().config().getString("entity-actor.query-tick-interval-iso-8601"));
+    // timerScheduler.startTimerWithFixedDelay(new Tick(), interval);
     nodePort = actorContext.getSystem().address().getPort().orElse(-1);
   }
 
   @Override
   public Receive<Command> createReceive() {
     return newReceiveBuilder()
-        .onMessage(Tick.class, t -> onTick())
+        .onMessage(Tick.class, t -> onTick(t))
         .onMessage(EntityActor.GetValueAck.class, this::onGetValueAck)
         .onMessage(EntityActor.GetValueAckNotFound.class, this::onGetValueAckNotFound)
         .build();
   }
 
-  private Behavior<EntityActor.Command> onTick() {
-    final var entityId = EntityActor.entityId(nodePort, (int) Math.round(Math.random() * entitiesPerNode));
-    final var id = new EntityActor.Id(entityId);
-    final var entityRef = clusterSharding.entityRefFor(EntityActor.entityTypeKey, entityId);
+  private Behavior<EntityActor.Command> onTick(Tick tick) {
+    // final var entityId = EntityActor.entityId(nodePort, (int) Math.round(Math.random() * entitiesPerNode));
+    final var id = new EntityActor.Id(tick.entityId);
+    final var entityRef = clusterSharding.entityRefFor(EntityActor.entityTypeKey, tick.entityId);
     entityRef.tell(new EntityActor.GetValue(id, actorContext.getSelf()));
     return this;
   }
@@ -66,7 +66,11 @@ class EntityQueryActor extends AbstractBehavior<EntityActor.Command> {
     return actorContext.getSystem().log();
   }
 
-  enum Tick implements EntityActor.Command {
-    ticktock
+  public static class Tick implements EntityActor.Command {
+    private final String entityId;
+
+    public Tick(String entityId) {
+      this.entityId = entityId;
+    }
   }
 }

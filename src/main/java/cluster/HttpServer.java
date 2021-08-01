@@ -7,6 +7,7 @@ import static akka.http.javadsl.server.Directives.getFromResource;
 import static akka.http.javadsl.server.Directives.handleWebSocketMessages;
 import static akka.http.javadsl.server.Directives.path;
 import static akka.http.javadsl.server.Directives.respondWithHeader;
+import static akka.http.javadsl.server.Directives.*;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -23,14 +24,18 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import akka.http.javadsl.marshallers.jackson.Jackson;
 
 import org.slf4j.Logger;
 
 import akka.NotUsed;
+import akka.actor.typed.ActorRef;
 import akka.actor.typed.ActorSystem;
+import akka.actor.typed.javadsl.ActorContext;
 import akka.cluster.Member;
 import akka.cluster.MemberStatus;
 import akka.cluster.typed.Cluster;
@@ -38,25 +43,29 @@ import akka.cluster.typed.Leave;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.model.ContentTypes;
 import akka.http.javadsl.model.MediaTypes;
+import akka.http.javadsl.model.StatusCodes;
 import akka.http.javadsl.model.headers.RawHeader;
 import akka.http.javadsl.model.ws.Message;
 import akka.http.javadsl.model.ws.TextMessage;
 import akka.http.javadsl.server.Route;
 import akka.japi.JavaPartialFunction;
 import akka.stream.javadsl.Flow;
+import cluster.EntityActor.Command;
 import cluster.HttpServer.ServerActivitySummary.ServerActivity;
 
 class HttpServer {
-  private final ActorSystem<?> actorSystem;
+  private final ActorContext<?> context;
+  private final ActorRef<EntityActor.Command> entityCommand;
+  private final ActorRef<EntityActor.Command> entityQuery;
   private ClusterAwareStatistics clusterAwareStatistics;
   private SingletonAwareStatistics singletonAwareStatistics;
   private final Tree tree = new Tree("cluster", "cluster");
   private final ActivitySummary activitySummary = new ActivitySummary();
 
-  static HttpServer start(ActorSystem<?> actorSystem) {
-    final int port = memberPort(Cluster.get(actorSystem).selfMember());
+  static HttpServer start(final ActorContext<?> context, final ActorRef<EntityActor.Command> entityCommand, final ActorRef<Command> entityQuery) {
+    final int port = memberPort(Cluster.get(context.getSystem()).selfMember());
     if (port >= 2551 && port <= 2559) {
-      return new HttpServer(port + 7000, actorSystem);
+      return new HttpServer(port + 7000, context, entityCommand, entityQuery);
     } else {
       final String message = String
           .format("HTTP server not started. Node port %d is invalid. The port must be >= 2551 and <= 2559.", port);
@@ -65,13 +74,15 @@ class HttpServer {
     }
   }
 
-  private HttpServer(int port, ActorSystem<?> actorSystem) {
-    this.actorSystem = actorSystem;
+  private HttpServer(int port, ActorContext<?> context, final ActorRef<EntityActor.Command> entityCommand, ActorRef<Command> entityQuery) {
+    this.context = context;
+    this.entityCommand = entityCommand;
+    this.entityQuery = entityQuery;
     start(port);
   }
 
   private void start(int port) {
-    Http.get(actorSystem).newServerAt("localhost", port).bind(route());
+    Http.get(context.getSystem()).newServerAt("localhost", port).bind(route());
     log().info("HTTP Server started on port {}", port);
   }
 
@@ -90,13 +101,28 @@ class HttpServer {
         path("viewer.js", () -> getFromResource("viewer.js", ContentTypes.APPLICATION_JSON)),
         path("d3.v5.js", () -> getFromResource("d3.v5.js", MediaTypes.APPLICATION_JAVASCRIPT.toContentTypeWithMissingCharset())),
         path("viewer-entities", () -> handleWebSocketMessages(handleClientMessages())),
-        path("favicon.ico", () -> getFromResource("favicon.ico", MediaTypes.IMAGE_X_ICON.toContentType()))
+        path("favicon.ico", () -> getFromResource("favicon.ico", MediaTypes.IMAGE_X_ICON.toContentType())),
+        path("send-value", () -> post(() -> entity(Jackson.unmarshaller(SetEntityValue.class), data -> {
+          entityCommand.tell(new EntityCommandActor.SendValueToEntity(data.entityId, data.value));
+          entityQuery.tell(new EntityQueryActor.Tick(data.entityId));
+          return complete(StatusCodes.OK, data, Jackson.marshaller());
+        }))),
+        path("start-ticker", () -> get(() -> {
+          entityCommand.tell(new EntityCommandActor.StartTick());
+          // entityQuery.tell(new EntityQueryActor.Tick(data.entityId));
+          return complete(StatusCodes.OK, "sent", Jackson.marshaller());
+        })),
+        path("stop-ticker", () -> get(() -> {
+          entityCommand.tell(new EntityCommandActor.StopTick());
+          // entityQuery.tell(new EntityQueryActor.Tick(data.entityId));
+          return complete(StatusCodes.OK, "sent", Jackson.marshaller());
+        }))
     );
   }
 
   private Route clusterState() {
     return get(() -> respondWithHeader(RawHeader.create("Access-Control-Allow-Origin", "*"),
-        () -> complete(loadNodes(actorSystem, clusterAwareStatistics, singletonAwareStatistics).toJson())));
+        () -> complete(loadNodes(context.getSystem(), clusterAwareStatistics, singletonAwareStatistics).toJson())));
   }
 
   private Flow<Message, Message, NotUsed> handleClientMessages() {
@@ -126,7 +152,7 @@ class HttpServer {
 
   private void handleStopNode(String memberAddress) {
     log().info("Stop node {}", memberAddress);
-    final var cluster = Cluster.get(actorSystem);
+    final var cluster = Cluster.get(context.getSystem());
     cluster.state().getMembers().forEach(member -> {
       if (memberAddress.equals(member.address().toString())) {
         cluster.manager().tell(Leave.create(member.address()));
@@ -135,7 +161,7 @@ class HttpServer {
   }
 
   private Message responseAsJson() {
-    tree.setMemberType(Cluster.get(actorSystem).selfMember().address().toString(), "httpServer");
+    tree.setMemberType(Cluster.get(context.getSystem()).selfMember().address().toString(), "httpServer");
     final var clientResponse = new ClientResponse(tree, activitySummary);
     return TextMessage.create(clientResponse.toJson());
   }
@@ -186,7 +212,7 @@ class HttpServer {
   }
 
   private Logger log() {
-    return actorSystem.log();
+    return context.getSystem().log();
   }
 
   private static boolean isValidPort(int port) {
@@ -668,5 +694,18 @@ class HttpServer {
         return String.format("{ \"error\" : \"%s\" }", e.getMessage());
       }
     }
+  }
+
+  public static class SetEntityValue implements Serializable {
+    private static final long serialVersionUID = 1L;
+    public final String entityId;
+    public final String value;
+
+    @JsonCreator
+    public SetEntityValue(@JsonProperty("entityId") String entityId, @JsonProperty("value") String value) {
+      this.entityId = entityId;
+      this.value = value;
+    }
+
   }
 }

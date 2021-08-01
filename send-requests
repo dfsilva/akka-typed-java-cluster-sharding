@@ -1,0 +1,9 @@
+#!/bin/bash
+device=$1
+port=$2
+while :
+do
+    echo "Enviando request dispositivo $device"
+    curl -H "Content-type: application/json" -X POST -d '{"entityId": "device-'$device'", "value": "1"}' http://127.0.0.1:955$port/send-value
+    sleep .5
+done

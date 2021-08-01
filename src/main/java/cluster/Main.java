@@ -29,13 +29,13 @@ class Main {
   private static void bootstrap(final ActorContext<Void> context) {
     context.spawn(ClusterListenerActor.create(), "clusterListener");
 
-    final var httpServerActorRef = context.spawn(HttpServerActor.create(), HttpServerActor.class.getSimpleName());
+    final ActorRef<EntityActor.Command> entityCommand = context.spawn(EntityCommandActor.create(), EntityCommandActor.class.getSimpleName());
+    final ActorRef<EntityActor.Command> entityQuery = context.spawn(EntityQueryActor.create(), EntityQueryActor.class.getSimpleName());
+    
+    final var httpServerActorRef = context.spawn(HttpServerActor.create(entityCommand, entityQuery), HttpServerActor.class.getSimpleName());
 
     context.spawn(ClusterAwareActor.create(httpServerActorRef), ClusterAwareActor.class.getSimpleName());
     context.spawn(ClusterSingletonAwareActor.create(httpServerActorRef), ClusterSingletonAwareActor.class.getSimpleName());
-    context.spawn(EntityCommandActor.create(), EntityCommandActor.class.getSimpleName());
-    context.spawn(EntityQueryActor.create(), EntityQueryActor.class.getSimpleName());
-
     startClusterSharding(context.getSystem(), httpServerActorRef);
   }
 

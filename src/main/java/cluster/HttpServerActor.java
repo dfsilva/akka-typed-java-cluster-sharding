@@ -6,6 +6,7 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.receptionist.Receptionist;
 import akka.actor.typed.receptionist.ServiceKey;
+import cluster.EntityActor.Command;
 import cluster.HttpServer.EntityAction;
 
 import java.util.Set;
@@ -21,15 +22,14 @@ class HttpServerActor {
   private static final ServiceKey<HttpServer.Statistics> serviceKey = 
     ServiceKey.create(HttpServer.Statistics.class, HttpServer.class.getSimpleName());
 
-  static Behavior<HttpServer.Statistics> create() {
-    return Behaviors.setup(context -> new HttpServerActor(context).behavior());
+  static Behavior<HttpServer.Statistics> create(final ActorRef<EntityActor.Command> entityCommand, ActorRef<EntityActor.Command> entityQuery) {
+    return Behaviors.setup(context -> new HttpServerActor(context, entityCommand, entityQuery).behavior());
   }
 
-  private HttpServerActor(ActorContext<HttpServer.Statistics> actorContext) {
+  private HttpServerActor(ActorContext<HttpServer.Statistics> actorContext, final ActorRef<EntityActor.Command> entityCommand, final ActorRef<Command> entityQuery) {
     this.actorContext = actorContext;
-
     receptionistRegisterSubscribe(actorContext);
-    httpServer = HttpServer.start(actorContext.getSystem());
+    httpServer = HttpServer.start(actorContext, entityCommand, entityQuery);
   }
 
   private Behavior<HttpServer.Statistics> behavior() {
