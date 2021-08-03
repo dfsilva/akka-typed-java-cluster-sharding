@@ -28,9 +28,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+
 import akka.http.javadsl.marshallers.jackson.Jackson;
 
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import akka.NotUsed;
 import akka.actor.typed.ActorRef;
@@ -50,19 +52,23 @@ import akka.http.javadsl.model.ws.TextMessage;
 import akka.http.javadsl.server.Route;
 import akka.japi.JavaPartialFunction;
 import akka.stream.javadsl.Flow;
-import cluster.EntityActor.Command;
+import cluster.DeviceEntityActor.Command;
 import cluster.HttpServer.ServerActivitySummary.ServerActivity;
 
 class HttpServer {
+  
+
   private final ActorContext<?> context;
-  private final ActorRef<EntityActor.Command> entityCommand;
-  private final ActorRef<EntityActor.Command> entityQuery;
+  private final ActorRef<DeviceEntityActor.Command> entityCommand;
+  private final ActorRef<DeviceEntityActor.Command> entityQuery;
   private ClusterAwareStatistics clusterAwareStatistics;
   private SingletonAwareStatistics singletonAwareStatistics;
   private final Tree tree = new Tree("cluster", "cluster");
   private final ActivitySummary activitySummary = new ActivitySummary();
 
-  static HttpServer start(final ActorContext<?> context, final ActorRef<EntityActor.Command> entityCommand, final ActorRef<Command> entityQuery) {
+  private final Logger logger = LoggerFactory.getLogger(HttpServer.class);
+
+  static HttpServer start(final ActorContext<?> context, final ActorRef<DeviceEntityActor.Command> entityCommand, final ActorRef<Command> entityQuery) {
     final int port = memberPort(Cluster.get(context.getSystem()).selfMember());
     if (port >= 2551 && port <= 2559) {
       return new HttpServer(port + 7000, context, entityCommand, entityQuery);
@@ -74,7 +80,7 @@ class HttpServer {
     }
   }
 
-  private HttpServer(int port, ActorContext<?> context, final ActorRef<EntityActor.Command> entityCommand, ActorRef<Command> entityQuery) {
+  private HttpServer(int port, ActorContext<?> context, final ActorRef<DeviceEntityActor.Command> entityCommand, ActorRef<Command> entityQuery) {
     this.context = context;
     this.entityCommand = entityCommand;
     this.entityQuery = entityQuery;
@@ -104,17 +110,17 @@ class HttpServer {
         path("favicon.ico", () -> getFromResource("favicon.ico", MediaTypes.IMAGE_X_ICON.toContentType())),
         path("send-value", () -> post(() -> entity(Jackson.unmarshaller(SetEntityValue.class), data -> {
           entityCommand.tell(new EntityCommandActor.SendValueToEntity(data.entityId, data.value));
-          entityQuery.tell(new EntityQueryActor.Tick(data.entityId));
+          entityQuery.tell(new EntityQueryActor.GetValueToEntity(data.entityId));
           return complete(StatusCodes.OK, data, Jackson.marshaller());
         }))),
         path("start-ticker", () -> get(() -> {
           entityCommand.tell(new EntityCommandActor.StartTick());
-          // entityQuery.tell(new EntityQueryActor.Tick(data.entityId));
+          entityQuery.tell(new EntityQueryActor.StartTick());
           return complete(StatusCodes.OK, "sent", Jackson.marshaller());
         })),
         path("stop-ticker", () -> get(() -> {
           entityCommand.tell(new EntityCommandActor.StopTick());
-          // entityQuery.tell(new EntityQueryActor.Tick(data.entityId));
+          entityQuery.tell(new EntityQueryActor.StopTick());
           return complete(StatusCodes.OK, "sent", Jackson.marshaller());
         }))
     );
@@ -169,7 +175,6 @@ class HttpServer {
   private static Nodes loadNodes(ActorSystem<?> actorSystem, ClusterAwareStatistics clusterAwareStatistics, SingletonAwareStatistics singletonAwareStatistics) {
     final var cluster = Cluster.get(actorSystem);
     final var clusterState = cluster.state();
-
     final var unreachable = clusterState.getUnreachable();
 
     final var old = StreamSupport.stream(clusterState.getMembers().spliterator(), false)
@@ -274,12 +279,27 @@ class HttpServer {
   }
 
   void load(EntityAction entityAction) {
+    logger.debug("--- load {}", entityAction);
+
+    final var cluster = Cluster.get(context.getSystem());
+    final var clusterState = cluster.state();
+    final var unreachable = clusterState.getUnreachable();
+
+    logger.debug("unreachable {}", unreachable.size());
+
+    unreachable.forEach(member -> {
+      logger.debug("unreachable {}", member);
+      tree.removeMember(member.address().toString());
+    });
+
     switch (entityAction.action) {
       case "start":
+        // tree.checkIfIsEmptyAndRemove(entityAction.member, entityAction.shardId, entityAction.entityId);
         tree.add(entityAction.member, entityAction.shardId, entityAction.entityId);
         activitySummary.load(entityAction);
         break;
       case "ping":
+        // tree.checkIfIsEmptyAndRemove(entityAction.member, entityAction.shardId, entityAction.entityId);
         activitySummary.load(entityAction);
         break;
       case "stop":
@@ -494,6 +514,16 @@ class HttpServer {
           }
         }
       }
+    }
+
+    void removeMember(String memberId) {
+        var it = children.iterator();
+        while (it.hasNext()) {
+          var child = it.next();
+          if(child.name.equals(memberId)) {
+            it.remove();
+          }
+        }
     }
 
     void incrementEvents(String memberId, String shardId, String entityId) {

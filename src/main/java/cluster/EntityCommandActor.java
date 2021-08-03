@@ -11,23 +11,22 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.javadsl.TimerScheduler;
-import akka.cluster.OnMemberStatusChangedListener;
 import akka.cluster.sharding.typed.javadsl.ClusterSharding;
-import cluster.EntityActor.Command;
+import cluster.DeviceEntityActor.Command;
 
-class EntityCommandActor extends AbstractBehavior<EntityActor.Command> {
-  private final ActorContext<EntityActor.Command> actorContext;
+class EntityCommandActor extends AbstractBehavior<DeviceEntityActor.Command> {
+  private final ActorContext<DeviceEntityActor.Command> actorContext;
   private final ClusterSharding clusterSharding;
   private final int entitiesPerNode;
   private final Integer nodePort;
-  private final TimerScheduler<EntityActor.Command> timerScheduler;
+  private final TimerScheduler<DeviceEntityActor.Command> timerScheduler;
 
-  static Behavior<EntityActor.Command> create() {
+  static Behavior<DeviceEntityActor.Command> create() {
     return Behaviors.setup(actorContext -> 
         Behaviors.withTimers(timer -> new EntityCommandActor(actorContext, timer)));
   }
 
-  private EntityCommandActor(ActorContext<Command> actorContext, TimerScheduler<EntityActor.Command> timerScheduler) {
+  private EntityCommandActor(ActorContext<Command> actorContext, TimerScheduler<DeviceEntityActor.Command> timerScheduler) {
     super(actorContext);
     this.actorContext = actorContext;
     clusterSharding = ClusterSharding.get(actorContext.getSystem());
@@ -50,28 +49,28 @@ class EntityCommandActor extends AbstractBehavior<EntityActor.Command> {
           timerScheduler.cancelAll();
           return this;
         })
-        .onMessage(EntityActor.ChangeValueAck.class, this::onChangeValueAck)
+        .onMessage(DeviceEntityActor.ChangeValueAck.class, this::onChangeValueAck)
         .build();
   }
 
-  private Behavior<EntityActor.Command> sendValueToEntity(SendValueToEntity tick) {
-    final var id = new EntityActor.Id(tick.entityId);
-    final var value = new EntityActor.Value(tick.value);
-    final var entityRef = clusterSharding.entityRefFor(EntityActor.entityTypeKey, tick.entityId);
-    entityRef.tell(new EntityActor.ChangeValue(id, value, actorContext.getSelf()));
+  private Behavior<DeviceEntityActor.Command> sendValueToEntity(SendValueToEntity tick) {
+    final var id = new DeviceEntityActor.Id(tick.entityId);
+    final var value = new DeviceEntityActor.Value(tick.value);
+    final var entityRef = clusterSharding.entityRefFor(DeviceEntityActor.entityTypeKey, tick.entityId);
+    entityRef.tell(new DeviceEntityActor.ChangeValue(id, value, actorContext.getSelf()));
     return this;
   }
 
-  private Behavior<EntityActor.Command> ramdomValue() {
-    final var entityId = EntityActor.entityId(nodePort, (int) Math.round(Math.random() * entitiesPerNode));
-    final var id = new EntityActor.Id(entityId);
-    final var value = new EntityActor.Value(new Date());
-    final var entityRef = clusterSharding.entityRefFor(EntityActor.entityTypeKey, entityId);
-    entityRef.tell(new EntityActor.ChangeValue(id, value, actorContext.getSelf()));
+  private Behavior<DeviceEntityActor.Command> ramdomValue() {
+    final var entityId = DeviceEntityActor.entityId(nodePort, (int) Math.round(Math.random() * entitiesPerNode));
+    final var id = new DeviceEntityActor.Id(entityId);
+    final var value = new DeviceEntityActor.Value(new Date());
+    final var entityRef = clusterSharding.entityRefFor(DeviceEntityActor.entityTypeKey, entityId);
+    entityRef.tell(new DeviceEntityActor.ChangeValue(id, value, actorContext.getSelf()));
     return this;
   }
 
-  private Behavior<EntityActor.Command> onChangeValueAck(EntityActor.ChangeValueAck changeValueAck) {
+  private Behavior<DeviceEntityActor.Command> onChangeValueAck(DeviceEntityActor.ChangeValueAck changeValueAck) {
     log().info("{}", changeValueAck);
     return this;
   }
@@ -80,7 +79,7 @@ class EntityCommandActor extends AbstractBehavior<EntityActor.Command> {
     return actorContext.getSystem().log();
   }
 
-  public static class SendValueToEntity implements EntityActor.Command {
+  public static class SendValueToEntity implements DeviceEntityActor.Command {
     final String entityId;
     final String value;
 
@@ -90,14 +89,14 @@ class EntityCommandActor extends AbstractBehavior<EntityActor.Command> {
     }
   }
 
-  public static class SendRandomValue implements EntityActor.Command {
+  public static class SendRandomValue implements DeviceEntityActor.Command {
   
   }
 
-  public static class StartTick implements EntityActor.Command {
+  public static class StartTick implements DeviceEntityActor.Command {
   
   }
-  public static class StopTick implements EntityActor.Command {
+  public static class StopTick implements DeviceEntityActor.Command {
   
   }
 }

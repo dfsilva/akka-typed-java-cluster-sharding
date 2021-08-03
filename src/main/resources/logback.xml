@@ -1,11 +1,10 @@
 <configuration>
-
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>[%date{ISO8601}] [%level] [%logger] [%marker] [%thread] - %msg {%mdc}%n</pattern>
         </encoder>
     </appender>
-
+    <logger name="cluster" level="TRACE"/>
     <root level="ERROR">
         <appender-ref ref="STDOUT" />
     </root>

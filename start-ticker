@@ -1,0 +1,4 @@
+#!/bin/bash
+node=$1
+echo "Starting Ticker on Node $node"
+curl http://127.0.0.1:955$node/start-ticker

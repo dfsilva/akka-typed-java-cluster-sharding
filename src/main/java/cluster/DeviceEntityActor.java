@@ -14,20 +14,20 @@ import akka.cluster.sharding.typed.javadsl.EntityTypeKey;
 import cluster.HttpServer.EntityAction;
 import cluster.HttpServerActor.BroadcastEntityAction;
 
-class EntityActor extends AbstractBehavior<EntityActor.Command> {
+class DeviceEntityActor extends AbstractBehavior<DeviceEntityActor.Command> {
   private final ActorContext<Command> actorContext;
   private final String entityId;
   private final String shardId;
   private final String memberId;
   private final ActorRef<HttpServer.Statistics> httpServerActorRef;
   private State state;
-  static EntityTypeKey<Command> entityTypeKey = EntityTypeKey.create(Command.class, EntityActor.class.getSimpleName());
+  static EntityTypeKey<Command> entityTypeKey = EntityTypeKey.create(Command.class, DeviceEntityActor.class.getSimpleName());
 
   static Behavior<Command> create(String entityId, ActorRef<HttpServer.Statistics> httpServerActorRef) {
-    return Behaviors.setup(actorContext -> new EntityActor(actorContext, entityId, httpServerActorRef));
+    return Behaviors.setup(actorContext -> new DeviceEntityActor(actorContext, entityId, httpServerActorRef));
   }
 
-  private EntityActor(ActorContext<Command> actorContext, String entityId, ActorRef<HttpServer.Statistics> httpServerActorRef) {
+  private DeviceEntityActor(ActorContext<Command> actorContext, String entityId, ActorRef<HttpServer.Statistics> httpServerActorRef) {
     super(actorContext);
     this.actorContext = actorContext;
     this.entityId = entityId;
@@ -50,7 +50,6 @@ class EntityActor extends AbstractBehavior<EntityActor.Command> {
     if (state == null) {
       state = new State(changeValue.id, changeValue.value);
       log().info("initialize {}", state);
-
       changeValue.replyTo.tell(new ChangeValueAck("initialize", changeValue.id, changeValue.value));
       notifyHttpServer("start", changeValue.replyTo);
     } else {

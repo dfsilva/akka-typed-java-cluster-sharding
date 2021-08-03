@@ -29,8 +29,8 @@ class Main {
   private static void bootstrap(final ActorContext<Void> context) {
     context.spawn(ClusterListenerActor.create(), "clusterListener");
 
-    final ActorRef<EntityActor.Command> entityCommand = context.spawn(EntityCommandActor.create(), EntityCommandActor.class.getSimpleName());
-    final ActorRef<EntityActor.Command> entityQuery = context.spawn(EntityQueryActor.create(), EntityQueryActor.class.getSimpleName());
+    final ActorRef<DeviceEntityActor.Command> entityCommand = context.spawn(EntityCommandActor.create(), EntityCommandActor.class.getSimpleName());
+    final ActorRef<DeviceEntityActor.Command> entityQuery = context.spawn(EntityQueryActor.create(), EntityQueryActor.class.getSimpleName());
     
     final var httpServerActorRef = context.spawn(HttpServerActor.create(entityCommand, entityQuery), HttpServerActor.class.getSimpleName());
 
@@ -69,11 +69,11 @@ class Main {
     final var clusterSharding = ClusterSharding.get(actorSystem);
     clusterSharding.init(
       Entity.of(
-        EntityActor.entityTypeKey,
+        DeviceEntityActor.entityTypeKey,
         entityContext ->
-          EntityActor.create(entityContext.getEntityId(), httpServerActorRef)
+          DeviceEntityActor.create(entityContext.getEntityId(), httpServerActorRef)
       )
-      .withStopMessage(EntityActor.Passivate.INSTANCE)
+      .withStopMessage(DeviceEntityActor.Passivate.INSTANCE)
     );
   }
 }

@@ -39,7 +39,7 @@ class ClusterSingletonActor extends AbstractBehavior<Message> {
   private Behavior<Message> onPing(ClusterSingletonAwareActor.Ping ping) {
     singletonStatistics.ping(ping);
     if (singletonStatistics.totalPings % 100 == 0) {
-      log().info("<=={}", ping);
+      // log().info("<=={}", ping);
     }
     ping.replyTo
         .tell(new ClusterSingletonAwareActor.Pong(memberId, ping.start, singletonStatistics.totalPings,

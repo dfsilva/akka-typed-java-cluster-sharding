@@ -135,7 +135,7 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
 
   private void logInfoIf(boolean log, String format, Object arg) {
     if (log) {
-      log().info(format, arg);
+      // log().info(format, arg);
     }
   }
 

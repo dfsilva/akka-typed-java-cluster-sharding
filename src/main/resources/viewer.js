@@ -16,6 +16,7 @@ function sendWebSocketRequest(request) {
     webSocket.onmessage = function(event) {
       console.log(event);
       const root = JSON.parse(event.data);
+      console.log(root);
       if (svgHasFocus) {
         update(root);
       }

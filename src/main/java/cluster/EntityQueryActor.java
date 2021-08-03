@@ -11,53 +11,70 @@ import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.javadsl.TimerScheduler;
 import akka.cluster.sharding.typed.javadsl.ClusterSharding;
-import cluster.EntityActor.Command;
+import cluster.DeviceEntityActor.Command;
 
-class EntityQueryActor extends AbstractBehavior<EntityActor.Command> {
-  private final ActorContext<EntityActor.Command> actorContext;
+class EntityQueryActor extends AbstractBehavior<DeviceEntityActor.Command> {
+  private final ActorContext<DeviceEntityActor.Command> actorContext;
   private final ClusterSharding clusterSharding;
   private final int entitiesPerNode;
   private final Integer nodePort;
+  private final TimerScheduler<DeviceEntityActor.Command> timerScheduler;
 
-  static Behavior<EntityActor.Command> create() {
+  static Behavior<DeviceEntityActor.Command> create() {
     return Behaviors.setup(actorContext -> 
         Behaviors.withTimers(timer -> new EntityQueryActor(actorContext, timer)));
   }
 
-  private EntityQueryActor(ActorContext<Command> actorContext, TimerScheduler<EntityActor.Command> timerScheduler) {
+  private EntityQueryActor(ActorContext<Command> actorContext, TimerScheduler<DeviceEntityActor.Command> timerScheduler) {
     super(actorContext);
     this.actorContext = actorContext;
     clusterSharding = ClusterSharding.get(actorContext.getSystem());
 
     entitiesPerNode = actorContext.getSystem().settings().config().getInt("entity-actor.entities-per-node");
-    // final var interval = Duration.parse(actorContext.getSystem().settings().config().getString("entity-actor.query-tick-interval-iso-8601"));
-    // timerScheduler.startTimerWithFixedDelay(new Tick(), interval);
     nodePort = actorContext.getSystem().address().getPort().orElse(-1);
+    this.timerScheduler = timerScheduler;
   }
 
   @Override
   public Receive<Command> createReceive() {
     return newReceiveBuilder()
-        .onMessage(Tick.class, t -> onTick(t))
-        .onMessage(EntityActor.GetValueAck.class, this::onGetValueAck)
-        .onMessage(EntityActor.GetValueAckNotFound.class, this::onGetValueAckNotFound)
+        .onMessage(GetValueToEntity.class, t -> onTick(t))
+        .onMessage(GetRandomValue.class, t -> ramdomValue())
+        .onMessage(StartTick.class, t -> {
+            final var interval = Duration.parse(actorContext.getSystem().settings().config().getString("entity-actor.command-tick-interval-iso-8601"));
+            timerScheduler.startTimerWithFixedDelay(new GetRandomValue(), interval);
+          return this;
+        })
+        .onMessage(StopTick.class, t -> {
+          timerScheduler.cancelAll();
+          return this;
+        })
+        .onMessage(DeviceEntityActor.GetValueAck.class, this::onGetValueAck)
+        .onMessage(DeviceEntityActor.GetValueAckNotFound.class, this::onGetValueAckNotFound)
         .build();
   }
 
-  private Behavior<EntityActor.Command> onTick(Tick tick) {
-    // final var entityId = EntityActor.entityId(nodePort, (int) Math.round(Math.random() * entitiesPerNode));
-    final var id = new EntityActor.Id(tick.entityId);
-    final var entityRef = clusterSharding.entityRefFor(EntityActor.entityTypeKey, tick.entityId);
-    entityRef.tell(new EntityActor.GetValue(id, actorContext.getSelf()));
+  private Behavior<DeviceEntityActor.Command> onTick(GetValueToEntity tick) {
+    final var id = new DeviceEntityActor.Id(tick.entityId);
+    final var entityRef = clusterSharding.entityRefFor(DeviceEntityActor.entityTypeKey, tick.entityId);
+    entityRef.tell(new DeviceEntityActor.GetValue(id, actorContext.getSelf()));
     return this;
   }
 
-  private Behavior<EntityActor.Command> onGetValueAck(EntityActor.GetValueAck getValueAck) {
+  private Behavior<DeviceEntityActor.Command> ramdomValue() {
+    final var entityId = DeviceEntityActor.entityId(nodePort, (int) Math.round(Math.random() * entitiesPerNode));
+    final var id = new DeviceEntityActor.Id(entityId);
+    final var entityRef = clusterSharding.entityRefFor(DeviceEntityActor.entityTypeKey, entityId);
+    entityRef.tell(new DeviceEntityActor.GetValue(id, actorContext.getSelf()));
+    return this;
+  }
+
+  private Behavior<DeviceEntityActor.Command> onGetValueAck(DeviceEntityActor.GetValueAck getValueAck) {
     log().info("{}", getValueAck);
     return this;
   }
 
-  private Behavior<EntityActor.Command> onGetValueAckNotFound(EntityActor.GetValueAckNotFound getValueAckNotFound) {
+  private Behavior<DeviceEntityActor.Command> onGetValueAckNotFound(DeviceEntityActor.GetValueAckNotFound getValueAckNotFound) {
     log().info("{}", getValueAckNotFound);
     return this;
   }
@@ -66,11 +83,22 @@ class EntityQueryActor extends AbstractBehavior<EntityActor.Command> {
     return actorContext.getSystem().log();
   }
 
-  public static class Tick implements EntityActor.Command {
+  public static class GetValueToEntity implements DeviceEntityActor.Command {
     private final String entityId;
 
-    public Tick(String entityId) {
+    public GetValueToEntity(String entityId) {
       this.entityId = entityId;
     }
+  }
+
+  public static class GetRandomValue implements DeviceEntityActor.Command {
+  
+  }
+
+  public static class StartTick implements DeviceEntityActor.Command {
+  
+  }
+  public static class StopTick implements DeviceEntityActor.Command {
+  
   }
 }

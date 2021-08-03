@@ -52,7 +52,6 @@ class ClusterListenerActor extends AbstractBehavior<ClusterEvent.ClusterDomainEv
   private Behavior<ClusterEvent.ClusterDomainEvent> logClusterEvent(Object clusterEventMessage) {
     log.info("{} sent to {}", clusterEventMessage, cluster.selfMember());
     logClusterMembers();
-
     return Behaviors.same();
   }
 
@@ -61,7 +60,6 @@ class ClusterListenerActor extends AbstractBehavior<ClusterEvent.ClusterDomainEv
     if (!nodesNow.equals(nodesThen)) {
       nodesNow.nodes.forEach(new Consumer<Node>() {
         int m = 0;
-
         @Override
         public void accept(Node node) {
           log.info("{} {}", ++m, node);

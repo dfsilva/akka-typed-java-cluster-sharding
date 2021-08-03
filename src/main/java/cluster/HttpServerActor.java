@@ -6,7 +6,7 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.receptionist.Receptionist;
 import akka.actor.typed.receptionist.ServiceKey;
-import cluster.EntityActor.Command;
+import cluster.DeviceEntityActor.Command;
 import cluster.HttpServer.EntityAction;
 
 import java.util.Set;
@@ -22,11 +22,11 @@ class HttpServerActor {
   private static final ServiceKey<HttpServer.Statistics> serviceKey = 
     ServiceKey.create(HttpServer.Statistics.class, HttpServer.class.getSimpleName());
 
-  static Behavior<HttpServer.Statistics> create(final ActorRef<EntityActor.Command> entityCommand, ActorRef<EntityActor.Command> entityQuery) {
+  static Behavior<HttpServer.Statistics> create(final ActorRef<DeviceEntityActor.Command> entityCommand, ActorRef<DeviceEntityActor.Command> entityQuery) {
     return Behaviors.setup(context -> new HttpServerActor(context, entityCommand, entityQuery).behavior());
   }
 
-  private HttpServerActor(ActorContext<HttpServer.Statistics> actorContext, final ActorRef<EntityActor.Command> entityCommand, final ActorRef<Command> entityQuery) {
+  private HttpServerActor(ActorContext<HttpServer.Statistics> actorContext, final ActorRef<DeviceEntityActor.Command> entityCommand, final ActorRef<Command> entityQuery) {
     this.actorContext = actorContext;
     receptionistRegisterSubscribe(actorContext);
     httpServer = HttpServer.start(actorContext, entityCommand, entityQuery);
@@ -48,13 +48,13 @@ class HttpServerActor {
   }
 
   private Behavior<HttpServer.Statistics> onClusterAwareStatistics(HttpServer.ClusterAwareStatistics clusterAwareStatistics) {
-    log().info("Cluster aware statistics {} {}", clusterAwareStatistics.totalPings, clusterAwareStatistics.nodePings);
+    // log().info("Cluster aware statistics {} {}", clusterAwareStatistics.totalPings, clusterAwareStatistics.nodePings);
     httpServer.load(clusterAwareStatistics);
     return Behaviors.same();
   }
 
   private Behavior<HttpServer.Statistics> onSingletonAwareStatistics(HttpServer.SingletonAwareStatistics singletonAwareStatistics) {
-    log().info("Singleton aware statistics {}", singletonAwareStatistics.nodePings);
+    // log().info("Singleton aware statistics {}", singletonAwareStatistics.nodePings);
     httpServer.load(singletonAwareStatistics);
     return Behaviors.same();
   }
@@ -66,7 +66,7 @@ class HttpServerActor {
   }
 
   private Behavior<HttpServer.Statistics> onNotifyEntityAction(HttpServer.EntityAction entityAction) {
-    log().info("{}", entityAction);
+    // log().info("{}", entityAction);
     httpServer.load(entityAction);
     return Behaviors.same();
   }
