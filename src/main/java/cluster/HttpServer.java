@@ -279,27 +279,21 @@ class HttpServer {
   }
 
   void load(EntityAction entityAction) {
-    logger.debug("--- load {}", entityAction);
-
     final var cluster = Cluster.get(context.getSystem());
     final var clusterState = cluster.state();
     final var unreachable = clusterState.getUnreachable();
 
-    logger.debug("unreachable {}", unreachable.size());
-
     unreachable.forEach(member -> {
-      logger.debug("unreachable {}", member);
       tree.removeMember(member.address().toString());
+      activitySummary.removeServer(member.address().toString());
     });
 
     switch (entityAction.action) {
       case "start":
-        // tree.checkIfIsEmptyAndRemove(entityAction.member, entityAction.shardId, entityAction.entityId);
         tree.add(entityAction.member, entityAction.shardId, entityAction.entityId);
         activitySummary.load(entityAction);
         break;
       case "ping":
-        // tree.checkIfIsEmptyAndRemove(entityAction.member, entityAction.shardId, entityAction.entityId);
         activitySummary.load(entityAction);
         break;
       case "stop":
@@ -622,6 +616,10 @@ class HttpServer {
       serverActivitySummary.load(entityAction);
     }
 
+    void removeServer(String server) {
+      serverActivitySummary.removeServer(server);
+    }
+
     @Override
     public String toString() {
       return String.format("%s[%s]", getClass().getSimpleName(), serverActivitySummary.serverActivities.values());
@@ -635,6 +633,10 @@ class HttpServer {
     void load(EntityAction entityAction) {
       final String server = entityAction.httpServer;
       serverActivities.put(server, serverActivities.getOrDefault(server, new ServerActivity(server)).load(entityAction));
+    }
+
+    void removeServer(String server) {
+      serverActivities.remove(server);
     }
 
     @Override
@@ -655,11 +657,12 @@ class HttpServer {
 
       ServerActivity load(EntityAction entityAction) {
         messageCount++;
-
         links.offer(new Link(entityAction.entityId, entityAction.httpServer));
-        while (links.size() > 50) {
+
+        while (links.size() > 40) {
           links.poll();
         }
+
         return this;
       }
 
