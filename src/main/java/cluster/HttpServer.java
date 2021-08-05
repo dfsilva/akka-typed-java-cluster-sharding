@@ -659,7 +659,7 @@ class HttpServer {
         messageCount++;
         links.offer(new Link(entityAction.entityId, entityAction.httpServer));
 
-        while (links.size() > 40) {
+        while (links.size() > 30) {
           links.poll();
         }
 
